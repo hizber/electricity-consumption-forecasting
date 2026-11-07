@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+.obsidian/
+02 Data/Electric-consumption/
+02 Data/EDA/dashboard/analysis.json
+02 Data/EDA/dashboard/anomalies.csv
+02 Data/EDA/dashboard/dashboard.html
+02 Data/EDA/summary.json
+04 Experiments/baselines/
+04 Experiments/decision_features/results/
+04 Experiments/shared_features/prepared_no_weather/
+04 Experiments/shared_features/generated_weather_1h/
+*.ipynb_checkpoints/
