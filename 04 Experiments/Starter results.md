@@ -98,3 +98,58 @@ Temperature improved overall MAE by about 1.8% under the timing assumption. Summ
 | Previous day | 0.9188 | 1.2451 | 7.2458 | 9.9777 |
 
 Both forecasts use the same 365 complete validation profiles. The GRU has 12,939 parameters and reached its best hourly validation MAE at epoch 10. Its predictions share one past sequence. At each horizon, only the target calendar and horizon differ. The previous-day profile copies the prior 24 completed readings.
+
+## Four hourly starters on validation
+
+| Model | Parameters | Best epoch | MAE | RMSE | Training seconds |
+|---|---:|---:|---:|---:|---:|
+| LSTM | 17,225 | 5 | 0.6711 | 0.9083 | 23.1 |
+| GRU | 12,937 | 5 | 0.6652 | 0.9048 | 18.4 |
+| TCN | 37,353 | 5 | 0.6563 | 0.8901 | 258.1 |
+| Transformer | 25,513 | 5 | 0.6571 | 0.8896 | 60.4 |
+| Previous day | | | 0.9181 | 1.2444 | |
+
+The four runs share the same validation targets and settings. Architecture sizes differ. These CPU timings describe one machine and vary with concurrent load.
+
+## Frozen next-hour evaluation
+
+All four training runs captured the exact input split hashes, code and environment. Each holdout CSV passed its manifest hash check. The four models scored identical target keys and baselines within each period. Every cell shows MAE / RMSE.
+
+| Period | Hours | Previous day | LSTM | GRU | TCN | Transformer |
+|---|---:|---:|---:|---:|---:|---:|
+| Test | 8,760 | 0.9052 / 1.2200 | 0.6849 / 0.9265 | 0.6790 / 0.9196 | 0.6685 / 0.9059 | 0.6720 / 0.9055 |
+| Evaluation 1 | 2,208 | 0.9878 / 1.2765 | 0.7359 / 0.9490 | 0.7313 / 0.9459 | 0.7175 / 0.9348 | 0.7277 / 0.9400 |
+| Evaluation 2 | 1,416 | 1.0115 / 1.3162 | 0.7714 / 1.0189 | 0.7670 / 1.0182 | 0.7609 / 1.0078 | 0.7808 / 1.0236 |
+| Evaluation 3 | 2,205 | 0.9047 / 1.1672 | 0.7112 / 0.8973 | 0.7068 / 0.8884 | 0.6953 / 0.8777 | 0.6917 / 0.8761 |
+
+All four models improved MAE and RMSE over the previous-day baseline in all four periods. The TCN had the lowest MAE in three periods. The Transformer had the lowest MAE in Evaluation 3 and the lowest test RMSE. Evaluation 2 had the highest MAE for each model. The results use a single house and seed and do not establish a universal architecture ranking.
+
+### Large-error days and local-hour checks
+
+Each hourly report ranks the five complete UTC target-end dates with the largest daily MAE and records the baseline error and mean signed error. The local artifacts retain dates and diagnostic results. Partial days at the edges of the source are excluded from this ranking.
+
+| Period | Worst TCN day MAE | Previous-day MAE on that date | TCN mean signed error | Highest-error Helsinki target hour for TCN |
+|---|---:|---:|---:|---:|
+| Test | 1.3336 | 2.0042 | -0.5164 | 20:00 (1.3662) |
+| Evaluation 1 | 1.0602 | 1.0546 | -0.3437 | 20:00 (1.1818) |
+| Evaluation 2 | 1.1263 | 1.3508 | -0.3542 | 20:00 (1.5572) |
+| Evaluation 3 | 1.0307 | 1.2183 | -0.3191 | 21:00 (1.1804) |
+
+For the four TCN days above, mean consumption and mean absolute hour-to-hour change both exceeded their respective period averages. Hours in the top quarter of each period's load distribution accounted for 62–79% of absolute error on those days. The mean signed errors show underprediction on each day. This describes where errors accumulated; it does not identify the cause of the demand changes.
+
+## Frozen 24-hour evaluation
+
+One GRU forecast is issued at 00:00 UTC. The profile is evaluated on the next 24 hourly values and their total. Every cell shows MAE / RMSE.
+
+| Period | Complete profiles | GRU hourly | Previous day hourly | GRU 24-hour total | Previous day 24-hour total |
+|---|---:|---:|---:|---:|---:|
+| Test | 364 | 0.7251 / 0.9670 | 0.9054 / 1.2202 | 6.0430 / 8.1539 | 7.1044 / 9.6949 |
+| Evaluation 1 | 91 | 0.7723 / 0.9865 | 0.9827 / 1.2688 | 6.9064 / 8.9031 | 7.3957 / 10.2037 |
+| Evaluation 2 | 58 | 0.7927 / 1.0564 | 1.0125 / 1.3186 | 7.7775 / 9.6608 | 6.9321 / 8.8825 |
+| Evaluation 3 | 91 | 0.7693 / 0.9361 | 0.9089 / 1.1706 | 5.3511 / 6.3462 | 5.3733 / 6.6929 |
+
+The daily GRU improved hourly MAE in all four periods. In Evaluation 2 it had higher 24-hour total error than the previous-day baseline. Checkpoint selection used validation hourly MAE. The daily total is a separate outcome.
+
+## Remaining group work
+
+The four starters and their local HTML exports are available. Each student still needs to adapt and explain their own implementation, document AI use and reproduce the shared data and comparison. The group can then complete its final report. The split timezone and consumption unit remain provisional or unspecified. Historical weather availability and suitable same-origin forecast vintages remain unverified.
