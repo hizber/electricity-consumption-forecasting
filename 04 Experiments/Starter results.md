@@ -2,7 +2,7 @@
 
 ## Evaluation decision recorded before scoring
 
-On 10 November 2026, the shared comparison selected the four next-hour models with 24 completed consumption readings and the same eight Helsinki calendar inputs. It also selected the separate fixed-origin GRU with 24 readings, the same calendar inputs for each target, and its horizon index. The hourly runs are `lstm_h24_verified`, `gru_h24_verified`, `tcn_h24_verified` and `transformer_h24_verified`. The daily run is `gru_daily_h24_v1`. All use seed 42. Use the checkpoint with the lowest validation MAE for each run, with at most 10 epochs and patience 3. Keep rolling summaries and weather out of this comparison. The validation benefit of rolling summaries was small and depended on the metric. Historical weather availability remains unverified.
+On 10 November 2026, the shared comparison selected the four next-hour models with 24 completed consumption readings and the same eight Helsinki calendar inputs. It also selected the separate fixed-origin GRU with 24 readings, the same calendar inputs for each target, its horizon index, and the target-aligned previous-day reading. The hourly runs are `lstm_h24_verified`, `gru_h24_verified`, `tcn_h24_verified` and `transformer_h24_verified`. The daily run is `gru_daily_h24_v1`. All use seed 42. Use the checkpoint with the lowest validation MAE for each run, with at most 10 epochs and patience 3. Keep rolling summaries and weather out of this comparison. The validation benefit of rolling summaries was small and depended on the metric. Historical weather availability remains unverified.
 
 Freeze all five runs before opening any test or evaluation split. Score the test and three evaluation periods once with the frozen model and preprocessing. Earlier readings may enter the forecast history when available at the origin. Each hourly model must score the same target keys as the others. Compare daily results only on complete fixed-origin profiles. The figures below use the original source units, which the course dictionary does not specify. UTC assignment boundaries and the 00:00 UTC daily schedule remain provisional. The house's calendar features use `Europe/Helsinki`.
 
@@ -116,7 +116,9 @@ Temperature improved overall MAE by about 1.8% under the timing assumption. Summ
 | GRU | 0.7246 | 0.9669 | 5.8092 | 7.9161 |
 | Previous day | 0.9188 | 1.2451 | 7.2458 | 9.9777 |
 
-Both forecasts use the same 365 complete validation profiles. The GRU has 12,939 parameters and reached its best hourly validation MAE at epoch 10. Its predictions share one past sequence. At each horizon, only the target calendar and horizon differ. The previous-day profile copies the prior 24 completed readings.
+Both forecasts use the same 365 complete validation profiles. The GRU has 12,939 parameters and reached its best hourly validation MAE at epoch 10. Its predictions share one past sequence. For each horizon, the model also receives the target calendar, horizon index and target-aligned reading from the previous day. That previous-day reading is available at the common forecast origin. The previous-day baseline copies the prior 24 completed readings.
+
+The initial description omitted the target-aligned previous-day input. This was corrected when the saved training configuration was checked for the MAPE comparison.
 
 ## Four hourly starters on validation
 
@@ -160,6 +162,18 @@ For the four TCN days above, mean consumption and mean absolute hour-to-hour cha
 
 One GRU forecast is issued at 00:00 UTC. The profile is evaluated on the next 24 hourly values and their total. Every cell shows MAE / RMSE.
 
+For the requested four-model daily comparison, the LSTM, GRU, TCN and Transformer use the same 24-hour input history, target calendar, horizon and target-aligned previous-day reading. Each uses seed 42, up to 10 epochs, patience 3, and the checkpoint with the lowest validation hourly MAE. MAPE is reported as an additional metric and does not select the checkpoint. These settings were recorded before evaluating the new daily models. The group had already seen the earlier starter holdout results.
+
+The daily runs used the local `audit_20261110_v1` dataset manifest with SHA-256 `ba04e35ce5e076ad87c4c079031a723f434b1582bafb5860376294b0181b3db3`. Its 24 CSV hashes match the previous no-weather build. The LSTM, GRU, TCN and Transformer selected epochs 10, 10, 8 and 7, respectively. Their parameter counts are 17,227, 12,939, 37,355 and 25,515. Each run stores its fit/validation data, code and environment hashes with its frozen artifacts.
+
+| Validation model | Hourly MAE / RMSE / MAPE | 24-hour total MAE / RMSE / MAPE |
+|---|---:|---:|
+| Previous day | 0.9188 / 1.2451 / 70.25% | 7.2458 / 9.9777 / 16.37% |
+| LSTM | 0.7237 / 0.9694 / 59.40% | 5.9444 / 8.0408 / 13.69% |
+| GRU | 0.7246 / 0.9669 / 59.99% | 5.8092 / 7.9161 / 13.34% |
+| TCN | 0.7275 / 0.9727 / 59.84% | 6.0654 / 8.2534 / 13.85% |
+| Transformer | 0.7230 / 0.9699 / 57.63% | 6.2423 / 8.4131 / 14.16% |
+
 | Period | Complete profiles | GRU hourly | Previous day hourly | GRU 24-hour total | Previous day 24-hour total |
 |---|---:|---:|---:|---:|---:|
 | Test | 364 | 0.7251 / 0.9670 | 0.9054 / 1.2202 | 6.0430 / 8.1539 | 7.1044 / 9.6949 |
@@ -168,6 +182,81 @@ One GRU forecast is issued at 00:00 UTC. The profile is evaluated on the next 24
 | Evaluation 3 | 91 | 0.7693 / 0.9361 | 0.9089 / 1.1706 | 5.3511 / 6.3462 | 5.3733 / 6.6929 |
 
 The daily GRU improved hourly MAE in all four periods. In Evaluation 2 it had higher 24-hour total error than the previous-day baseline. Checkpoint selection used validation hourly MAE. The daily total is a separate outcome.
+
+## MAPE and baseline improvement
+
+This comparison pools the test period and all three evaluation periods, weighting every scored target equally. All models in each table use the same targets as their baseline. The hourly models are the existing frozen starters. The four daily models were trained and frozen with the previously selected fixed-origin inputs before their new scores were calculated. The group had already seen earlier holdout results.
+
+MAPE is 100 times the mean of the absolute error divided by the absolute actual. Zero actuals are excluded from MAPE and counted. There are no zero actuals in these pooled comparisons. For daily totals, the 24 actuals and predictions are summed before calculating the percentage error. Small actual values can have a large influence on hourly MAPE.
+
+An error reduction is 100 × (baseline error − model error) / baseline error. Positive values mean lower error. Negative values mean higher error. A MAPE reduction is relative to baseline MAPE and is not a percentage-point difference.
+
+### Next-hour forecasts
+
+Pooled over 14,589 hourly targets.
+
+| Model | MAE | RMSE | MAPE | MAE reduction | MAPE reduction |
+|---|---:|---:|---:|---:|---:|
+| Previous-day baseline | 0.9279 | 1.2306 | 62.71% | — | — |
+| LSTM | 0.7050 | 0.9350 | 49.72% | 24.03% | 20.71% |
+| GRU | 0.6996 | 0.9290 | 48.00% | 24.60% | 23.46% |
+| TCN | 0.6889 | 0.9165 | 47.85% | 25.76% | 23.69% |
+| Transformer | 0.6940 | 0.9186 | 48.58% | 25.22% | 22.53% |
+
+The period table shows relative error reduction for MAE / MAPE.
+
+| Period | Baseline MAE / MAPE | LSTM | GRU | TCN | Transformer |
+|---|---:|---:|---:|---:|---:|
+| Test | 0.9052 / 67.45% | +24.34% / +21.52% | +24.99% / +24.44% | +26.15% / +24.58% | +25.76% / +23.61% |
+| Evaluation 1 | 0.9878 / 52.63% | +25.50% / +20.86% | +25.96% / +23.16% | +27.36% / +24.89% | +26.33% / +22.66% |
+| Evaluation 2 | 1.0115 / 36.00% | +23.73% / +21.97% | +24.17% / +24.17% | +24.77% / +25.32% | +22.81% / +21.19% |
+| Evaluation 3 | 0.9047 / 71.10% | +21.39% / +17.10% | +21.88% / +19.74% | +23.15% / +18.93% | +23.55% / +18.77% |
+
+### 24-hour forecasts, individual hourly targets
+
+Pooled over 14,496 hourly targets within 604 profiles.
+
+| Model | MAE | RMSE | MAPE | MAE reduction | MAPE reduction |
+|---|---:|---:|---:|---:|---:|
+| Previous-day baseline | 0.9278 | 1.2301 | 62.65% | — | — |
+| LSTM | 0.7459 | 0.9785 | 54.39% | 19.61% | 13.19% |
+| GRU | 0.7454 | 0.9744 | 54.97% | 19.67% | 12.27% |
+| TCN | 0.7510 | 0.9859 | 54.65% | 19.06% | 12.78% |
+| Transformer | 0.7428 | 0.9732 | 53.04% | 19.94% | 15.34% |
+
+The period table shows relative error reduction for MAE / MAPE.
+
+| Period | Baseline MAE / MAPE | LSTM | GRU | TCN | Transformer |
+|---|---:|---:|---:|---:|---:|
+| Test | 0.9054 / 67.36% | +19.96% / +13.98% | +19.91% / +12.90% | +19.36% / +13.03% | +20.18% / +16.74% |
+| Evaluation 1 | 0.9827 / 52.52% | +20.91% / +17.01% | +21.41% / +16.58% | +21.06% / +17.81% | +21.42% / +17.75% |
+| Evaluation 2 | 1.0125 / 35.72% | +21.44% / +23.80% | +21.71% / +23.21% | +19.90% / +24.22% | +21.77% / +22.49% |
+| Evaluation 3 | 0.9089 / 71.13% | +15.53% / +3.97% | +15.36% / +3.19% | +15.09% / +4.47% | +16.09% / +5.97% |
+
+### 24-hour forecasts, summed 24-hour totals
+
+Pooled over 604 complete profiles.
+
+| Model | MAE | RMSE | MAPE | MAE reduction | MAPE reduction |
+|---|---:|---:|---:|---:|---:|
+| Previous-day baseline | 6.8709 | 9.3089 | 14.69% | — | — |
+| LSTM | 6.4480 | 8.4760 | 13.43% | 6.16% | 8.59% |
+| GRU | 6.2354 | 8.1878 | 13.11% | 9.25% | 10.72% |
+| TCN | 6.7458 | 8.8843 | 13.85% | 1.82% | 5.75% |
+| Transformer | 6.4252 | 8.3946 | 13.19% | 6.49% | 10.18% |
+
+The period table shows relative error reduction for MAE / MAPE.
+
+| Period | Baseline MAE / MAPE | LSTM | GRU | TCN | Transformer |
+|---|---:|---:|---:|---:|---:|
+| Test | 7.1044 / 16.68% | +12.52% / +13.57% | +14.94% / +15.38% | +9.06% / +10.70% | +10.65% / +13.53% |
+| Evaluation 1 | 7.3957 / 12.23% | -0.31% / +2.78% | +6.62% / +8.78% | -3.25% / +2.91% | +4.57% / +6.91% |
+| Evaluation 2 | 6.9321 / 8.91% | -16.67% / -10.02% | -12.20% / -6.70% | -33.14% / -24.72% | -17.81% / -12.39% |
+| Evaluation 3 | 5.3733 / 12.86% | +0.17% / -3.53% | +0.41% / -3.87% | -0.76% / -3.80% | +7.09% / +5.89% |
+
+In Evaluation 2, all four daily-total models had higher MAE than the previous-day baseline. The pooled daily-total MAE reduction is positive for each model. The comparison uses one seed and one house.
+
+The detailed local results and reproducible commands are described in the [model guide](models/README.md).
 
 ## Remaining group work
 

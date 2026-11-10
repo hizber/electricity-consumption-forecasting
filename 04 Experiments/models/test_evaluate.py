@@ -49,6 +49,14 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(parts['hour']['3']['model']['count'], 1)
         self.assertEqual(parts['hour']['4']['model']['count'], 1)
 
+    def test_mape_excludes_zero_actuals_and_handles_all_zero(self):
+        metrics = evaluate.score(np.array([0., 1., -2.]), np.array([5., 2., -1.]))
+        self.assertAlmostEqual(metrics['mape_percent'], 75.0)
+        self.assertEqual(metrics['mape_zero_actuals_excluded'], 1)
+        all_zero = evaluate.score(np.zeros(2), np.ones(2))
+        self.assertIsNone(all_zero['mape_percent'])
+        self.assertEqual(all_zero['mape_zero_actuals_excluded'], 2)
+
     def test_freeze_detects_artifact_and_dataset_tampering(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -92,7 +100,7 @@ class EvaluationTests(unittest.TestCase):
                     report = evaluate.evaluate(dataset, freeze, runs / 'test-output', ('test',))
                     self.assertEqual(report['periods']['test']['model']['count'], 1)
                     self.assertEqual(report['periods']['test']['previous_day']['mae'], 1.)
-                    self.assertNotIn('actual', json.dumps(report))
+                    self.assertNotIn('"actual":', json.dumps(report))
                     self.assertEqual(load.call_args.args[2], 'test')
                 (dataset / 'hourly/fit/features.csv').write_text('changed\n')
                 with self.assertRaisesRegex(ValueError, 'Dataset hash mismatch'):

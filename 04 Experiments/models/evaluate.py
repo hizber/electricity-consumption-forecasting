@@ -19,6 +19,7 @@ import torch
 
 from train import MODELS, loader
 from train_daily import baseline_profiles, predict_profiles, profile_metrics
+from metrics import score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'model_data'))
 from preprocessing import FeatureConfig, Preprocessor, load_split
@@ -27,7 +28,7 @@ from preprocessing import FeatureConfig, Preprocessor, load_split
 HERE = Path(__file__).resolve().parent
 RUNS = HERE / 'runs'
 HELDOUT = ('test', 'evaluation_1', 'evaluation_2', 'evaluation_3')
-CODE = (HERE / 'evaluate.py', HERE / 'train.py', HERE / 'train_daily.py', HERE / 'recurrent.py', HERE / 'temporal.py',
+CODE = (HERE / 'evaluate.py', HERE / 'train.py', HERE / 'train_daily.py', HERE / 'metrics.py', HERE / 'recurrent.py', HERE / 'temporal.py',
         HERE.parent / 'model_data' / 'preprocessing.py')
 
 
@@ -166,17 +167,6 @@ def _verify_freeze(dataset, freeze_file):
     model.load_state_dict(torch.load(run / 'model.pt', map_location='cpu', weights_only=True), strict=True)
     model.eval()
     return record, metrics, scaler, config, model
-
-
-def score(actual, predicted):
-    actual, predicted = np.asarray(actual), np.asarray(predicted)
-    if actual.shape != predicted.shape or not actual.size:
-        raise ValueError('Actual and predicted arrays must have matching nonempty shapes')
-    if not np.isfinite(actual).all() or not np.isfinite(predicted).all():
-        raise ValueError('Metrics require finite values')
-    errors = predicted - actual
-    return {'count': int(actual.size), 'mae': float(np.abs(errors).mean()),
-            'rmse': float(np.sqrt(np.mean(errors ** 2)))}
 
 
 def slices(targets, actual, predicted, baseline):

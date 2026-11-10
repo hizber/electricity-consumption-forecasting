@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'model_data'))
 from preprocessing import FeatureConfig, Preprocessor, load_split
+from metrics import score
 from recurrent import GRUForecaster, LSTMForecaster
 from temporal import TCNRegressor, TransformerRegressor
 
@@ -34,7 +35,7 @@ def digest(path):
 
 
 def code_hashes():
-    files = (Path(__file__), Path(__file__).with_name('recurrent.py'),
+    files = (Path(__file__), Path(__file__).with_name('metrics.py'), Path(__file__).with_name('recurrent.py'),
              Path(__file__).with_name('temporal.py'), Path(__file__).resolve().parents[1] / 'model_data/preprocessing.py')
     return {path.name: digest(path) for path in files}
 
@@ -116,12 +117,12 @@ def main():
             for sequence, context, _ in validating:
                 predictions.append(model(sequence, context).numpy())
         predicted = scaler.inverse_labels(np.concatenate(predictions))
-        errors = predicted - validation.labels
-        mae = float(np.mean(np.abs(errors)))
-        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        validation_scores = score(validation.labels, predicted)
+        mae, rmse = validation_scores['mae'], validation_scores['rmse']
         if not np.isfinite(mae) or not np.isfinite(rmse):
             raise ValueError('Validation metrics are not finite')
-        history.append({'epoch': epoch, 'fit_mse_scaled': total / count, 'validation_mae': mae, 'validation_rmse': rmse})
+        history.append({'epoch': epoch, 'fit_mse_scaled': total / count,
+                        **{f'validation_{key}': value for key, value in validation_scores.items()}})
         print(f'{args.model} epoch {epoch}: MAE {mae:.4f}, RMSE {rmse:.4f}', flush=True)
         if mae < best_loss:
             best_loss, best_state, best_epoch, stale = mae, copy.deepcopy(model.state_dict()), epoch, 0
@@ -134,7 +135,7 @@ def main():
         raise RuntimeError('Code or dataset changed during training')
     torch.save(best_state, args.output / 'model.pt')
     target_before = validation.history[:, -24, 0]
-    baseline_errors = target_before - validation.labels
+    baseline = score(validation.labels, target_before)
     result = {
         'model': args.model, 'seed': args.seed, 'history_hours': args.history,
         'feature_config': asdict(config),
@@ -147,8 +148,12 @@ def main():
         'parameter_count': sum(p.numel() for p in model.parameters()),
         'best_epoch': best_epoch, 'validation_mae': best_loss,
         'validation_rmse_at_best_epoch': history[best_epoch - 1]['validation_rmse'],
-        'previous_day_mae': float(np.mean(np.abs(baseline_errors))),
-        'previous_day_rmse': float(np.sqrt(np.mean(baseline_errors ** 2))),
+        'validation_mape_percent': history[best_epoch - 1]['validation_mape_percent'],
+        'validation_mape_zero_actuals_excluded': history[best_epoch - 1]['validation_mape_zero_actuals_excluded'],
+        'previous_day_mae': baseline['mae'],
+        'previous_day_rmse': baseline['rmse'],
+        'previous_day_mape_percent': baseline['mape_percent'],
+        'previous_day_mape_zero_actuals_excluded': baseline['mape_zero_actuals_excluded'],
         'seconds': time.monotonic() - started, 'epochs': history,
         'training_provenance': {
             'dataset_manifest_sha256': starting_manifest,

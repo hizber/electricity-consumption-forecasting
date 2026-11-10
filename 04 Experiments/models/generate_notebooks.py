@@ -5,12 +5,14 @@ import base64
 import io
 import json
 import os
+import platform
 import sys
 import tempfile
 from pathlib import Path
 
 import nbformat as nbf
 import numpy as np
+import torch
 from nbclient import NotebookClient
 from nbconvert import HTMLExporter
 from jupyter_client import KernelManager
@@ -55,6 +57,13 @@ training = batches('fit', shuffle=True)
 validation = batches('validation')
 best_mae = float('inf')
 stale = 0
+
+def mape(errors, actual):
+    '''Return MAPE and the count of zero actuals excluded from it.'''
+    nonzero = actual != 0
+    value = float(np.abs(errors[nonzero] / actual[nonzero]).mean() * 100) if nonzero.any() else None
+    return value, int((~nonzero).sum())
+
 for epoch in range(1, EPOCHS + 1):
     model.train()
     for history, context, labels in training:
@@ -70,16 +79,22 @@ for epoch in range(1, EPOCHS + 1):
     errors = scaled * data['label_scale'] + data['label_mean'] - data['actual']
     mae = float(np.mean(np.abs(errors)))
     rmse = float(np.sqrt(np.mean(errors ** 2)))
-    print(f'Epoch {epoch}: validation MAE {mae:.4f}, RMSE {rmse:.4f}')
+    mape_value, excluded = mape(errors, data['actual'])
+    mape_text = f'{mape_value:.2f}%' if mape_value is not None else 'undefined'
+    print(f'Epoch {epoch}: validation MAE {mae:.4f}, RMSE {rmse:.4f}, '
+          f'MAPE {mape_text} ({excluded} zero actuals excluded)')
     if mae < best_mae:
-        best_mae, best_rmse, best_epoch, stale = mae, rmse, epoch, 0
+        best_mae, best_rmse, best_mape, best_epoch, stale = mae, rmse, mape_text, epoch, 0
     else:
         stale += 1
         if stale >= 3:
             break
-print(f'Best epoch {best_epoch}: MAE {best_mae:.4f}, RMSE {best_rmse:.4f}')
+print(f'Best epoch {best_epoch}: MAE {best_mae:.4f}, RMSE {best_rmse:.4f}, MAPE {best_mape}')
 baseline = data['baseline'] - data['actual']
-print(f'Previous-day baseline: MAE {np.abs(baseline).mean():.4f}, RMSE {np.sqrt(np.mean(baseline ** 2)):.4f}')
+baseline_mape, excluded = mape(baseline, data['actual'])
+baseline_text = f'{baseline_mape:.2f}%' if baseline_mape is not None else 'undefined'
+print(f'Previous-day baseline: MAE {np.abs(baseline).mean():.4f}, RMSE {np.sqrt(np.mean(baseline ** 2)):.4f}, '
+      f'MAPE {baseline_text} ({excluded} zero actuals excluded)')
 """
 
 
@@ -109,7 +124,8 @@ def notebook(name, payload, dataset, epochs):
         nbf.v4.new_markdown_cell(
             f'# {name.upper()} next-hour forecasting starter\n\n'
             'Private course artifact containing derived household data. Keep it local. '
-            'Requires Python 3.12, NumPy and PyTorch. The embedded arrays use 24 chronological '
+            f'Tested with Python {platform.python_version()}, NumPy {np.__version__} and PyTorch {torch.__version__}. '
+            'The embedded arrays use 24 chronological '
             'load readings and known Helsinki calendar context. Preprocessing was fitted on '
             'the fitting split only. Validation selects the best epoch.\n\n'
             f'Source SHA-256: `{manifest["input_sha256"]}`. '
@@ -135,10 +151,14 @@ def main():
     parser.add_argument('--dataset', type=Path, required=True)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--model', choices=MODELS, action='append')
+    parser.add_argument('--output-dir', type=Path, help='New output directory inside models/notebooks')
     args = parser.parse_args()
     if args.epochs < 1:
         parser.error('--epochs must be positive')
-    output = HERE / 'notebooks' / f'epochs_{args.epochs}'
+    notebooks = (HERE / 'notebooks').resolve()
+    output = args.output_dir.resolve() if args.output_dir else notebooks / f'epochs_{args.epochs}'
+    if not output.is_relative_to(notebooks) or output == notebooks:
+        parser.error('output directory must be inside models/notebooks')
     output.mkdir(parents=True, exist_ok=True)
     payload = encoded_data(args.dataset)
     for name in args.model or MODELS:

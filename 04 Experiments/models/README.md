@@ -35,7 +35,9 @@ Run from the repository root. The output directory must not exist. This command 
 
 Use `--model gru`, `--model tcn` or `--model transformer` for the other architectures and choose a distinct output directory for each run. `--history` accepts 24, 72 or 168 hours. The remaining options include `--batch-size` and `--learning-rate`. Keep target hours, splits and metrics consistent when comparing models. A history-length experiment should also exclude longer-context engineered features; the current command selects no rolling summaries.
 
-The loader verifies split hashes, counts and feature-label alignment against the manifest. Preprocessing is fitted on the fitting split only. The training loop uses scaled-target MSE for gradient updates and selects the best epoch using validation MAE in the original source units, with early stopping controlled by patience. Validation RMSE and previous-day baseline MAE/RMSE are also recorded. Test and evaluation splits are not opened by this command. Freeze feature and model decisions using fitting and validation data before opening held-out data.
+The loader verifies split hashes, counts and feature-label alignment against the manifest. Preprocessing is fitted on the fitting split only. The training loop uses scaled-target MSE for gradient updates and selects the best epoch using validation MAE in the original source units, with early stopping controlled by patience. Validation and previous-day baseline MAE, RMSE and MAPE are also recorded. Test and evaluation splits are not opened by this command. Freeze feature and model decisions using fitting and validation data before opening held-out data.
+
+MAPE is the mean absolute error divided by the absolute actual value, expressed as a percentage. Zero actuals are excluded from MAPE and counted in the report. When all actuals are zero, MAPE is undefined and stored as `null`. MAE and RMSE include all observations. MAPE can be strongly affected by small actual values. Daily reports show both MAPE over individual hourly targets and MAPE over 24-hour totals.
 
 Each output folder contains `model.pt`, `preprocessor.json` and `metrics.json`, including selected columns, data source hash, configuration, epoch results, parameter count and elapsed training time. Run outputs are ignored under `04 Experiments/models/runs/` because fitted parameters and metrics are derived from household data. Keep all generated datasets, model outputs and course records local unless sharing has been approved. The source does not specify a consumption unit.
 
@@ -62,6 +64,9 @@ run="$PWD/04 Experiments/models/runs/gru_h24_verified"
 dataset="$PWD/04 Experiments/shared_features/prepared_no_weather/rebuild_v2"
 .venv/bin/python "$archive_dir/04 Experiments/models/evaluate.py" --evaluate \
   --dataset "$dataset" --freeze-file "$run/freeze.json" --output "$run/replay-example"
+.venv/bin/python '04 Experiments/models/score_archived_freeze.py' \
+  --snapshot "$archive_dir" --dataset "$dataset" --freeze-file "$run/freeze.json" \
+  --output "$run/mape-replay.json"
 ```
 
 The old manifest and model artifacts are local and excluded from the repository. A newly generated manifest may record different generator hashes even when its CSVs match, so it cannot replace the original manifest for this exact freeze check. Train and freeze new runs with the current code.
@@ -70,11 +75,29 @@ The old manifest and model artifacts are local and excluded from the repository.
 
 ```bash
 .venv/bin/python '04 Experiments/models/train_daily.py' \
-  --dataset "$dataset" --model gru --history 24 --epochs 10 --patience 3 --seed 42 \
+  --dataset "$dataset" --model gru --history 24 --seasonal-lags --epochs 10 --patience 3 --seed 42 \
   --output '04 Experiments/models/runs/gru-daily-example'
 ```
 
-The daily model applies a shared network across the 24 known horizon contexts using the same consumption history at one origin. It reports errors for hourly values and summed profiles, with a previous-day baseline for both. Use the same freeze and evaluation commands with the daily run directory to score complete held-out profiles.
+The daily model applies a shared network across the 24 known horizon contexts using the same consumption history at one origin. With `--seasonal-lags` and 24 hours of history, each horizon also receives its target-aligned reading from the previous day. It reports errors for hourly values and summed profiles, with a previous-day baseline for both. Use the same freeze and evaluation commands with the daily run directory to score complete held-out profiles.
+
+After scoring all frozen models, pool the four official periods and calculate relative reductions from the previous-day baseline:
+
+```bash
+runs='04 Experiments/models/runs'
+.venv/bin/python '04 Experiments/models/compare_results.py' \
+  --hourly lstm "$runs/lstm_h24_verified/mape_metrics_v2.json" \
+  --hourly gru "$runs/gru_h24_verified/mape_metrics_v2.json" \
+  --hourly tcn "$runs/tcn_h24_verified/mape_metrics_v2.json" \
+  --hourly transformer "$runs/transformer_h24_verified/mape_metrics_v2.json" \
+  --daily lstm "$runs/mape_daily_lstm_aligned/heldout_mape/evaluation.json" \
+  --daily gru "$runs/mape_daily_gru_aligned/heldout_mape/evaluation.json" \
+  --daily tcn "$runs/mape_daily_tcn_aligned/heldout_mape/evaluation.json" \
+  --daily transformer "$runs/mape_daily_transformer_aligned/heldout_mape/evaluation.json" \
+  --output "$runs/mape-comparison-example.json"
+```
+
+The comparison verifies model names, dataset manifests, target hashes, baseline scores and counts before combining periods. MAE and MAPE are weighted by their eligible counts. RMSE is combined from the squared period RMSEs. A negative reduction means that the model error exceeded the baseline error.
 
 ## Generate local notebook starters
 
@@ -82,7 +105,7 @@ The daily model applies a shared network across the 24 known horizon contexts us
 .venv/bin/python '04 Experiments/models/generate_notebooks.py' --dataset "$dataset"
 ```
 
-The generator executes each notebook from an empty working directory and exports its HTML in `models/notebooks/`. Notebooks embed fitting and validation arrays and require the pinned libraries. The HTML removes the embedded data cell. Keep the generated notebooks and exports local and check course requirements before sharing them.
+The generator executes each notebook from an empty working directory and exports its HTML in `models/notebooks/`. Use `--output-dir '04 Experiments/models/notebooks/mape_10'` to choose a new directory when the default already exists. Notebooks embed fitting and validation arrays and require the pinned libraries. The HTML removes the embedded data cell. Keep the generated notebooks and exports local and check course requirements before sharing them.
 
 ## Scope
 

@@ -40,7 +40,15 @@ class DailyTrainerTests(unittest.TestCase):
         np.testing.assert_array_equal(baseline['previous_week'], np.arange(24).reshape(1, 24))
         metrics = profile_metrics(np.ones((2, 24)), np.zeros((2, 24)))
         self.assertEqual(metrics, {'hourly_mae': 1, 'hourly_rmse': 1,
-                                   'total_mae': 24, 'total_rmse': 24})
+                                   'hourly_mape_percent': None, 'hourly_mape_zero_actuals_excluded': 48,
+                                   'total_mae': 24, 'total_rmse': 24,
+                                   'total_mape_percent': None, 'total_mape_zero_actuals_excluded': 2})
+        actual = np.ones((2, 24))
+        predicted = actual.copy()
+        predicted[0, 0] = 3
+        metrics = profile_metrics(predicted, actual)
+        self.assertAlmostEqual(metrics['hourly_mape_percent'], 100 * 2 / 48)
+        self.assertAlmostEqual(metrics['total_mape_percent'], 100 * (2 / 24) / 2)
 
     def test_cli_reads_only_fit_and_validation(self):
         with tempfile.TemporaryDirectory() as tmp:

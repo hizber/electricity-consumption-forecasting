@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 from train import MODELS, FeatureConfig, Preprocessor, code_hashes, digest, load_split, loader
+from metrics import score
 
 
 def predict_profiles(model, history, context):
@@ -39,12 +40,11 @@ def profile_metrics(predicted, actual):
         raise ValueError('predictions and targets must have matching [profiles, 24] shapes')
     if not np.isfinite(predicted).all() or not np.isfinite(actual).all():
         raise ValueError('predictions and targets must be finite')
-    errors = predicted - actual
-    totals = predicted.sum(axis=1) - actual.sum(axis=1)
-    return {'hourly_mae': float(np.mean(np.abs(errors))),
-            'hourly_rmse': float(np.sqrt(np.mean(errors ** 2))),
-            'total_mae': float(np.mean(np.abs(totals))),
-            'total_rmse': float(np.sqrt(np.mean(totals ** 2)))}
+    hourly = score(actual, predicted)
+    total = score(actual.sum(axis=1), predicted.sum(axis=1))
+    return {f'{prefix}_{key}': value
+            for prefix, metrics in (('hourly', hourly), ('total', total))
+            for key, value in metrics.items() if key != 'count'}
 
 
 def baseline_profiles(history):

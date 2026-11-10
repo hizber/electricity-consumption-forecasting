@@ -18,7 +18,7 @@ For the hour ending `t + 1`, compare the latest observed consumption `y[t]`, con
 
 ## Metrics and group work
 
-Propose MAE as the primary metric and RMSE as a complementary measure, in the original source units, which remain unspecified. Report the same metrics on identical timestamps for each approach. Each student studies and implements a neural network as required; assess the models against the baselines and each other, then report the required test and evaluation results and investigate large-error days. Avoid repeatedly tuning on test or evaluation sets. Record configurations, results, group decisions and individual AI use.
+Use MAE as the primary checkpoint-selection metric and report RMSE and MAPE as complementary measures on identical targets. MAE and RMSE use the original source units, which remain unspecified. MAPE excludes zero actuals and reports their count. For the daily task, compute MAPE separately for individual hourly targets and for the summed 24-hour total. Each student studies and implements a neural network as required; assess the models against the baselines and each other, then report the required test and evaluation results and investigate large-error days. Avoid repeatedly tuning on test or evaluation sets. Record configurations, results, group decisions and individual AI use.
 
 See [[Initial exploration]], [[Assignment requirements]] and [[Experiment workspace]].
 
