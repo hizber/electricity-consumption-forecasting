@@ -12,7 +12,11 @@ The [shared feature generator and usage guide](shared_features/README.md) provid
 
 ## Prepared hourly and daily datasets
 
-The [rebuild instructions](shared_features/README.md) and [dataset manifest](shared_features/prepared_no_weather/manifest.json) cover both next-hour forecasts and 24-hour forecasts issued once daily at 00:00 UTC. Each dataset has separate fit, validation, test and three evaluation splits with separately keyed features and labels. The 24-hour profiles remain wholly within one split. The prepared version omits weather because historical publication and revision times are unverified. UTC split boundaries, the daily forecast schedule and meter availability at the origin remain assumptions to confirm.
+The [rebuild instructions](shared_features/README.md) and [dataset manifest](shared_features/prepared_no_weather/manifest.json) cover both next-hour forecasts and 24-hour forecasts issued once daily at 00:00 UTC. Each dataset has separate fit, validation, test and three evaluation splits with separately keyed features and labels. The 24-hour profiles remain wholly within one split. The prepared version omits weather because historical publication and revision times are unverified. The project owner confirmed immediate meter availability. UTC split boundaries and the daily forecast schedule remain provisional.
+
+## Model experiments
+
+See [[Starter results]] and the [shared model guide](models/README.md).
 
 ## Decisions feature generator
 

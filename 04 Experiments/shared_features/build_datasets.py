@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import platform
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,11 +42,28 @@ def split_for(first, last):
     return None
 
 
+def close_outputs(feature_file, label_file):
+    """Fail if an output path was replaced while its file was open."""
+    try:
+        for stream in (feature_file, label_file):
+            if stream.closed:
+                continue
+            stream.flush()
+            opened = os.fstat(stream.fileno())
+            current = os.stat(stream.name)
+            if opened.st_nlink == 0 or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+                raise OSError(f'Output file was replaced during writing: {stream.name}')
+    finally:
+        feature_file.close()
+        label_file.close()
+
+
 def save_rows(output, name, rows):
     """Rows contain origin, target, final profile target, predictors and labels."""
     folder = output / name
     folder.mkdir()
-    writers = {}
+    written_splits = set()
+    active = None
     counts = {split: 0 for split in SPLITS}
     feature_names = None
     label_names = None
@@ -59,35 +77,49 @@ def save_rows(output, name, rows):
             if feature_names is None:
                 feature_names = list(features)
                 label_names = list(labels)
-                for part in SPLITS:
-                    directory = folder / part
-                    directory.mkdir()
-                    xf = (directory / 'features.csv').open('w', newline='', encoding='utf-8')
-                    yf = (directory / 'labels.csv').open('w', newline='', encoding='utf-8')
-                    xw = csv.DictWriter(xf, fieldnames=['origin_utc', 'target_end_utc', *feature_names])
-                    yw = csv.DictWriter(yf, fieldnames=['origin_utc', 'target_end_utc', *label_names])
-                    xw.writeheader()
-                    yw.writeheader()
-                    writers[part] = (xf, yf, xw, yw)
             if list(features) != feature_names or list(labels) != label_names:
                 raise ValueError('Inconsistent dataset schema')
-            _, _, xw, yw = writers[split]
+            if active is None or active[0] != split:
+                if active is not None:
+                    close_outputs(active[1], active[2])
+                    active = None
+                if split in written_splits:
+                    raise ValueError(f'Rows return to an earlier split: {split}')
+                directory = folder / split
+                directory.mkdir()
+                xf = (directory / 'features.csv').open('x', newline='', encoding='utf-8')
+                yf = (directory / 'labels.csv').open('x', newline='', encoding='utf-8')
+                xw = csv.DictWriter(xf, fieldnames=['origin_utc', 'target_end_utc', *feature_names])
+                yw = csv.DictWriter(yf, fieldnames=['origin_utc', 'target_end_utc', *label_names])
+                xw.writeheader()
+                yw.writeheader()
+                active = (split, xf, yf, xw, yw)
+                written_splits.add(split)
+            _, _, _, xw, yw = active
             metadata = {'origin_utc': origin.isoformat(), 'target_end_utc': target.isoformat()}
             xw.writerow({**metadata, **features})
             yw.writerow({**metadata, **labels})
             counts[split] += 1
     finally:
-        for xf, yf, _, _ in writers.values():
-            xf.close()
-            yf.close()
+        if active is not None:
+            close_outputs(active[1], active[2])
     if feature_names is None:
         raise ValueError(f'No eligible rows for {name}')
+    for split in SPLITS:
+        if split not in written_splits:
+            directory = folder / split
+            directory.mkdir()
+            for filename, columns in (
+                ('features.csv', feature_names), ('labels.csv', label_names)
+            ):
+                with (directory / filename).open('x', newline='', encoding='utf-8') as stream:
+                    csv.writer(stream).writerow(['origin_utc', 'target_end_utc', *columns])
     return {'rows': counts, 'excluded_cross_boundary_or_outside_period': skipped,
             'predictor_columns': feature_names, 'label_columns': label_names}
 
 
-def hourly_rows(records):
-    for origin, target, features, label in feature_rows(records):
+def hourly_rows(records, weather_latency_hours=None):
+    for origin, target, features, label in feature_rows(records, weather_latency_hours):
         yield origin, target, target, features, {'consumption': label}
 
 
@@ -109,8 +141,8 @@ def verify_saved_rows(output, task, counts):
                 raise ValueError(f'Unexpected number of rows in {task}/{split}: {count} != {expected}')
 
 
-def daily_rows(records):
-    for origin, target, step, features, label in generate_daily_rows(records):
+def daily_rows(records, weather_latency_hours=None):
+    for origin, target, step, features, label in generate_daily_rows(records, weather_latency_hours):
         yield origin, target, origin + timedelta(hours=24), {'horizon_hours': step, **features}, {'consumption': label}
 
 
@@ -118,13 +150,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=Path, default=SOURCE)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--weather-latency-hours', type=int, default=None,
+                        help='Opt in to observed weather using an assumed nonnegative publication delay in whole hours')
     args = parser.parse_args()
     if args.output_dir.exists():
         parser.error('Output directory must not already exist')
-    records = read_source(args.input, False)
+    if args.weather_latency_hours is not None and args.weather_latency_hours < 0:
+        parser.error('--weather-latency-hours must be nonnegative')
+    records = read_source(args.input, args.weather_latency_hours is not None)
     args.output_dir.mkdir(parents=True)
-    hourly = save_rows(args.output_dir, 'hourly', hourly_rows(records))
-    daily = save_rows(args.output_dir, 'daily', daily_rows(records))
+    hourly = save_rows(args.output_dir, 'hourly', hourly_rows(records, args.weather_latency_hours))
+    daily = save_rows(args.output_dir, 'daily', daily_rows(records, args.weather_latency_hours))
     verify_saved_rows(args.output_dir, 'hourly', hourly['rows'])
     verify_saved_rows(args.output_dir, 'daily', daily['rows'])
     scripts = [Path(__file__), Path(__file__).with_name('generate_features.py'),
@@ -137,7 +173,15 @@ def main():
         'python_version': platform.python_version(),
         'split_boundaries_utc': {n: {'start_inclusive': s.isoformat(), 'end_exclusive': e.isoformat()} for n, (s, e) in SPLITS.items()},
         'hourly': hourly, 'daily': daily,
-        'weather': 'excluded: historical availability and revision times unverified',
+        'weather': ('excluded: historical availability and revision times unverified'
+                    if args.weather_latency_hours is None else
+                    'included conditionally: historical availability and revision times unverified'),
+        'weather_availability': (None if args.weather_latency_hours is None else {
+            'kind': 'observed_weather',
+            'assumed_publication_delay_hours': args.weather_latency_hours,
+            'historical_publication_and_revision_times_verified': False,
+            'note': 'Conditional experiment only; delay is an assumption and observations may have later revisions.',
+        }),
         'assumptions': ['meter reading available at origin', 'split boundaries use UTC provisionally',
                         'daily forecast at 00:00 UTC, 24 elapsed hours'],
     }

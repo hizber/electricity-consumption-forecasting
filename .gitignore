@@ -14,4 +14,6 @@ __pycache__/
 04 Experiments/decision_features/results/
 04 Experiments/shared_features/prepared_no_weather/
 04 Experiments/shared_features/generated_weather_1h/
+04 Experiments/models/runs/
+04 Experiments/models/notebooks/
 *.ipynb_checkpoints/

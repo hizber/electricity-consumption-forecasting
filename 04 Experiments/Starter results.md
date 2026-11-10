@@ -1,0 +1,100 @@
+# Shared forecasting starter results
+
+## Evaluation decision recorded before scoring
+
+On 10 November 2026, the shared comparison selected the four next-hour models with 24 completed consumption readings and the same eight Helsinki calendar inputs. It also selected the separate fixed-origin GRU with 24 readings, the same calendar inputs for each target, and its horizon index. The hourly runs are `lstm_h24_verified`, `gru_h24_verified`, `tcn_h24_verified` and `transformer_h24_verified`. The daily run is `gru_daily_h24_v1`. All use seed 42. Use the checkpoint with the lowest validation MAE for each run, with at most 10 epochs and patience 3. Keep rolling summaries and weather out of this comparison. The validation benefit of rolling summaries was small and depended on the metric. Historical weather availability remains unverified.
+
+Freeze all five runs before opening any test or evaluation split. Score the test and three evaluation periods once with the frozen model and preprocessing. Earlier readings may enter the forecast history when available at the origin. Each hourly model must score the same target keys as the others. Compare daily results only on complete fixed-origin profiles. The figures below use the original source units, which the course dictionary does not specify. UTC assignment boundaries and the 00:00 UTC daily schedule remain provisional. The house's calendar features use `Europe/Helsinki`.
+
+## Data version and reproducibility
+
+- Source SHA-256 `9e8334d93bc3f9f1391216f68f52eedb5c9ebd3c2a5856e97db0177cf76f70a0`.
+- Training dataset manifest SHA-256 `1ddf0d15b69cb08a719d31b82129ae4c0cfdd7049f7a213cd40857327ff66149` for the local `prepared_no_weather/rebuild_v2`. The manifest records the three generator hashes, all 24 split CSV hashes, counts and UTC boundaries. Use [the setup guide](../02%20Data/Setup.md) to rebuild it with the current code. The manifest hash may differ with a different builder revision or Python version. Compare the split CSVs against [the reference hashes](shared_features/dataset-sha256.txt) to establish byte-identical data.
+- The common hourly set uses a 168-hour eligibility warmup even for shorter model inputs. It contains 32,690 fit targets and 8,784 validation targets. The daily set has 1,361 fit profiles and 365 validation profiles. See [coverage and exclusions](../02%20Data/Quality%20review.md).
+- Train with default architecture sizes, CPU, Adam at 0.001 and scaled MSE. Batch size is 128 hourly examples or 32 daily origins. Fit scaling and imputation on the fit split. Use validation for early stopping and compare predictions in original source units. The run JSON files record column names, exact data and code hashes, Python, NumPy and PyTorch versions, and epoch results. See the [model guide](models/README.md).
+
+## Hourly feature experiments on validation
+
+All rows below use the same 8,784 target keys and labels. History is ordered from oldest to newest. The calendar group is `hour_sin`, `hour_cos`, `weekday_sin`, `weekday_cos`, `year_sin`, `year_cos`, `is_weekend` and `is_finnish_public_holiday`. Rolling features are the mean, population standard deviation, minimum, maximum and change over 3, 6 and 24 completed readings in the 24-hour experiments. The 72- and 168-hour comparisons use history and calendar only.
+
+| GRU features | Hours | Best epoch | MAE | RMSE | Training seconds |
+|---|---:|---:|---:|---:|---:|
+| History | 24 | 5 | 0.6677 | 0.9050 | 33.5 |
+| History and rolling | 24 | 10 | 0.6671 | 0.8983 | 23.0 |
+| History and calendar | 24 | 5 | 0.6652 | 0.9048 | 16.7 |
+| History, calendar and rolling | 24 | 7 | 0.6642 | 0.8996 | 24.4 |
+| History and calendar | 72 | 7 | 0.6723 | 0.9067 | 76.6 |
+| History and calendar | 168 | 10 | 0.6723 | 0.9077 | 148.7 |
+| Previous day | | | 0.9181 | 1.2444 | |
+
+The table uses seed 42 and one validation year. Timings are approximate CPU wall time and depend on concurrent load. In these runs 24 hours gave lower MAE than 72 or 168. Adding calendar and rolling to the 24-hour model lowered MAE by 0.0035 compared with history alone. That difference is too small to establish a stable advantage from one run.
+
+### Seasonal and hourly validation errors
+
+Season and hour refer to target end time in Helsinki. Each hour uses all eligible dates at that hour.
+
+| Features | Autumn MAE | Winter MAE | Spring MAE | Summer MAE | Worst local hour | MAE at that hour |
+|---|---:|---:|---:|---:|---:|---:|
+| History | 0.7217 | 0.8266 | 0.7364 | 0.3884 | 20:00 | 1.2355 |
+| History and rolling | 0.7137 | 0.8179 | 0.7369 | 0.4022 | 20:00 | 1.2081 |
+| History and calendar | 0.7224 | 0.8212 | 0.7413 | 0.3782 | 20:00 | 1.2323 |
+| History, calendar and rolling | 0.7123 | 0.8248 | 0.7384 | 0.3834 | 20:00 | 1.1955 |
+| History and calendar, 72h | 0.7259 | 0.8240 | 0.7438 | 0.3977 | 20:00 | 1.2175 |
+| History and calendar, 168h | 0.7256 | 0.8218 | 0.7414 | 0.4025 | 20:00 | 1.2142 |
+
+| Helsinki target hour | History MAE | History + rolling | History + calendar | All three | Previous day |
+|---|---:|---:|---:|---:|---:|
+| 00:00 | 0.5730 | 0.5964 | 0.5534 | 0.5776 | 0.6779 |
+| 01:00 | 0.5141 | 0.5051 | 0.4989 | 0.4934 | 0.6790 |
+| 02:00 | 0.5102 | 0.5009 | 0.4981 | 0.4862 | 0.7118 |
+| 03:00 | 0.5127 | 0.5000 | 0.5021 | 0.4875 | 0.7357 |
+| 04:00 | 0.4840 | 0.4754 | 0.4735 | 0.4672 | 0.6430 |
+| 05:00 | 0.5219 | 0.5051 | 0.5097 | 0.5003 | 0.7425 |
+| 06:00 | 0.5226 | 0.5134 | 0.5389 | 0.5219 | 0.7456 |
+| 07:00 | 0.6211 | 0.6173 | 0.6322 | 0.6143 | 0.8567 |
+| 08:00 | 0.6280 | 0.6097 | 0.6543 | 0.6386 | 0.9360 |
+| 09:00 | 0.6262 | 0.6161 | 0.6387 | 0.6285 | 0.8945 |
+| 10:00 | 0.6631 | 0.6627 | 0.6756 | 0.6811 | 0.9323 |
+| 11:00 | 0.6254 | 0.6291 | 0.6253 | 0.6236 | 0.9286 |
+| 12:00 | 0.6453 | 0.6461 | 0.6413 | 0.6483 | 0.9720 |
+| 13:00 | 0.6776 | 0.6849 | 0.6777 | 0.6872 | 0.9611 |
+| 14:00 | 0.6464 | 0.6551 | 0.6515 | 0.6609 | 0.9505 |
+| 15:00 | 0.6006 | 0.6035 | 0.6031 | 0.6042 | 0.9369 |
+| 16:00 | 0.7316 | 0.7253 | 0.7157 | 0.7144 | 1.0014 |
+| 17:00 | 0.6893 | 0.6913 | 0.6900 | 0.6894 | 0.9299 |
+| 18:00 | 0.6739 | 0.6808 | 0.6827 | 0.6906 | 0.9946 |
+| 19:00 | 0.8285 | 0.8165 | 0.8217 | 0.8124 | 1.0897 |
+| 20:00 | 1.2355 | 1.2081 | 1.2323 | 1.1955 | 1.4654 |
+| 21:00 | 1.0640 | 1.0487 | 1.0635 | 1.0504 | 1.3109 |
+| 22:00 | 0.7690 | 0.8198 | 0.7460 | 0.7945 | 1.0680 |
+| 23:00 | 0.6608 | 0.6994 | 0.6383 | 0.6719 | 0.8712 |
+
+## Conditional hourly weather comparison
+
+The weather features come from the original course CSV's observations. A one-hour publication delay is assumed, so for a target ending at `t + 1` the latest weather observation ends at `t − 1`. The conditional build has the same fit and validation keys and labels as the no-weather build. The temperature group includes latest temperature, a missingness flag and heating degrees with a 15 °C threshold. The expanded group adds 3-, 6- and 24-hour temperature mean and change, latest humidity and wind speed, and their missingness flags. The [provenance note](../02%20Data/Weather%20provenance.md) records the unresolved availability and revision questions.
+
+| GRU with 24-hour history and calendar | MAE | RMSE | Autumn MAE | Winter MAE | Spring MAE | Summer MAE |
+|---|---:|---:|---:|---:|---:|---:|
+| No weather | 0.6652 | 0.9048 | 0.7224 | 0.8212 | 0.7413 | 0.3782 |
+| Temperature group | 0.6533 | 0.8833 | 0.7045 | 0.8012 | 0.7170 | 0.3925 |
+| Expanded weather group | 0.6540 | 0.8826 | 0.7024 | 0.8023 | 0.7190 | 0.3946 |
+
+| Missing before fit-only mean imputation | Fit | Validation |
+|---|---:|---:|
+| Latest temperature and heating degrees, each | 57 | 46 |
+| Latest humidity | 138 | 46 |
+| Latest wind speed | 439 | 70 |
+| Temperature mean and change, each, 3-hour window | 120 | 131 |
+| Temperature mean and change, each, 6-hour window | 211 | 251 |
+| Temperature mean and change, each, 24-hour window | 715 | 882 |
+
+Temperature improved overall MAE by about 1.8% under the timing assumption. Summer MAE increased in both weather runs. The small RMSE difference between the two weather groups does not isolate the effects of humidity, wind or the added rolling terms.
+
+## Daily validation at one origin
+
+| Forecast | Hourly MAE | Hourly RMSE | 24-hour total MAE | 24-hour total RMSE |
+|---|---:|---:|---:|---:|
+| GRU | 0.7246 | 0.9669 | 5.8092 | 7.9161 |
+| Previous day | 0.9188 | 1.2451 | 7.2458 | 9.9777 |
+
+Both forecasts use the same 365 complete validation profiles. The GRU has 12,939 parameters and reached its best hourly validation MAE at epoch 10. Its predictions share one past sequence. At each horizon, only the target calendar and horizon differ. The previous-day profile copies the prior 24 completed readings.

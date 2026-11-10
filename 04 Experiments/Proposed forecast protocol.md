@@ -4,7 +4,9 @@
 
 ## Forecast definition
 
-At the end of hour `t`, assume the consumption measurement for the hour ending at `t` is available, and predict consumption for the hour ending at `t + 1`. Confirm the measurement availability and assignment split timezone before final scoring. Use only information available at that forecast origin. Observed weather for the target hour is not available beforehand unless a suitable forecast is actually supplied.
+At the end of hour `t`, the consumption measurement for the hour ending at `t` is available, and the task is to predict consumption for the hour ending at `t + 1`. The project owner confirmed immediate meter-reading availability on 7 November 2026. The timezone of the assignment's split boundaries remains provisional and should be confirmed before final scoring. Use only information available at the forecast origin. Observed weather for the target hour is not available beforehand unless a suitable forecast is actually supplied.
+
+For the optional next-day task, the group will provisionally issue one forecast at 00:00 UTC for the next 24 elapsed hours. The house is in Jyväskylä, Finland. UTC is used for chronological ordering and the provisional split and forecast schedule; calendar features use `Europe/Helsinki`, including daylight-saving transitions. This is not yet a confirmed local-calendar-day schedule.
 
 ## Development split
 
@@ -19,3 +21,5 @@ For the hour ending `t + 1`, compare the latest observed consumption `y[t]`, con
 Propose MAE as the primary metric and RMSE as a complementary measure, in the original source units, which remain unspecified. Report the same metrics on identical timestamps for each approach. Each student studies and implements a neural network as required; assess the models against the baselines and each other, then report the required test and evaluation results and investigate large-error days. Avoid repeatedly tuning on test or evaluation sets. Record configurations, results, group decisions and individual AI use.
 
 See [[Initial exploration]], [[Assignment requirements]] and [[Experiment workspace]].
+
+The [starter results](Starter%20results.md) record the frozen shared-model settings and reference data checksums. The fixed-model evaluation reuses fitting-only preprocessing throughout each held-out period. Past readings can enter later forecasts after they become available, including readings from earlier held-out hours. They do not update the fitted model. A future rolling-retraining experiment would require a separate protocol and time-ordered refitting at each scheduled origin.
