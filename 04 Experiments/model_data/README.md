@@ -17,7 +17,7 @@ x_val, calendar_val, y_val = scaler.transform(validation)
 scaler.save(root + '/hourly_scaler.json')  # use an ignored local output directory
 ```
 
-Set `root` to the directory containing the verified dataset manifest. The example names the independently verified rebuild available in the current workspace; choose the actual output directory in another checkout. Do not commit household-derived scalers, datasets or prediction tables. `load_split` verifies the manifest's CSV hashes and counts, split boundaries and feature-label keys by default. It rejects incomplete or cross-boundary daily profiles.
+Set `root` to the directory containing the verified dataset manifest. The example names the independently verified rebuild available in the current workspace; choose the actual output directory in another checkout. Do not commit household-derived scalers, datasets or prediction tables. `load_split` verifies the manifest's CSV hashes and counts, ordered non-overlapping split boundaries, and feature-label keys by default. It rejects incomplete or cross-boundary daily profiles.
 
 History arrays have shape `(examples, history_hours, 1)`, with readings ordered oldest to newest. Hourly context has shape `(examples, context_features)` and labels have shape `(examples,)`. For daily data, use `horizon='daily'`; history has the same shape, context is `(profiles, 24, context_features)`, and labels are `(profiles, 24)` in horizon order. `origins` and `targets` are metadata and are not included in the predictor arrays.
 

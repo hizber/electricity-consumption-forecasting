@@ -131,6 +131,27 @@ def _reader(handle, required):
     return reader
 
 
+def _split_bounds(manifest, selected):
+    boundaries = manifest['split_boundaries_utc']
+    previous_end = None
+    selected_bounds = None
+    for split in SPLITS:
+        if split not in boundaries:
+            continue
+        start = _time(boundaries[split]['start_inclusive'])
+        end = _time(boundaries[split]['end_exclusive'])
+        if start >= end:
+            raise ValueError(f'Invalid split boundaries: {split}')
+        if previous_end is not None and start < previous_end:
+            raise ValueError(f'Split boundaries overlap or are out of order: {split}')
+        if split == selected:
+            selected_bounds = start, end
+        previous_end = end
+    if selected_bounds is None:
+        raise ValueError(f'Missing split boundaries: {selected}')
+    return selected_bounds
+
+
 def load_split(root, horizon, split, config=FeatureConfig(), *, verify_hashes=True):
     """Load keyed rows, enforcing manifest hashes, split boundaries and horizons.
 
@@ -156,8 +177,7 @@ def load_split(root, horizon, split, config=FeatureConfig(), *, verify_hashes=Tr
             key = path.relative_to(root).as_posix()
             if manifest['output_sha256'].get(key) != _hash(path):
                 raise ValueError(f'Output hash mismatch: {key}')
-    start = _time(manifest['split_boundaries_utc'][split]['start_inclusive'])
-    end = _time(manifest['split_boundaries_utc'][split]['end_exclusive'])
+    start, end = _split_bounds(manifest, split)
     expected = manifest[horizon]['rows'][split]
     origins, targets, histories, contexts, labels = [], [], [], [], []
     seen = set()

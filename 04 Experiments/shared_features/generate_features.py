@@ -87,6 +87,12 @@ def circular(value, period):
 
 
 def feature_rows(records, weather_latency_hours=None):
+    if weather_latency_hours is not None and (
+        isinstance(weather_latency_hours, bool)
+        or not isinstance(weather_latency_hours, int)
+        or weather_latency_hours < 0
+    ):
+        raise ValueError("weather latency must be a nonnegative integer number of hours")
     holidays = {}
     for index in range(168, len(records)):
         target, label, _ = records[index]

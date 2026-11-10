@@ -14,6 +14,8 @@ The assignment CSV already includes hourly FMI station observations. Its source 
 
 The example assumes a one-hour publication delay. For target `t+1`, the newest weather observation used ends at `t−1`. This is a provisional experiment assumption, not proof that all historical observations were available by the origin. Test a longer delay if needed and record the chosen assumption with results. Without `--weather-latency-hours`, weather is omitted. Weather values are never taken from the target hour. Missing observations remain empty and latest-value missingness indicators are provided. Rolling temperature summaries require a complete window. Do not fill missing values using future data. Learn any imputation or scaling parameters only on the fitting fold. The 2016 weather provenance needs confirmation because the PDF states weather begins in 2017.
 
+The Python generators and command-line tools require the assumed delay to be a nonnegative whole number of hours. A zero-hour delay assumes an origin-hour observation has already been published and remains conditional on availability evidence.
+
 The features include latest available temperature, humidity and wind, temperature means and changes over 3, 6, 24 and 168 hours, and `max(0, 15 − temperature)` as a trial heating indicator. The 15 °C threshold is a hypothesis. Archived weather forecasts and solar data are not included because suitable historical forecast vintages and coverage have not been verified.
 
 ## Tests

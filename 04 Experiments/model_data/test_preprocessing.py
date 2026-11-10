@@ -49,8 +49,11 @@ class PreprocessingTests(unittest.TestCase):
         manifest_path = self.root / 'manifest.json'
         manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {
             'split_boundaries_utc': {}, 'output_sha256': {}, 'hourly': {'rows': {}}, 'daily': {'rows': {}}}
-        manifest['split_boundaries_utc'][split] = {'start_inclusive': '2020-01-01T00:00:00+00:00',
-                                                   'end_exclusive': '2020-02-01T00:00:00+00:00'}
+        if split == 'validation':
+            start, end = '2020-02-01T00:00:00+00:00', '2020-03-01T00:00:00+00:00'
+        else:
+            start, end = '2020-01-01T00:00:00+00:00', '2020-02-01T00:00:00+00:00'
+        manifest['split_boundaries_utc'][split] = {'start_inclusive': start, 'end_exclusive': end}
         manifest[horizon]['rows'][split] = len(rows)
         if weather:
             manifest['weather_availability'] = {'kind': 'observed_weather',
@@ -69,11 +72,32 @@ class PreprocessingTests(unittest.TestCase):
         self.assertNotIn('load_previous_week_target', config.context_columns('daily'))
         self.assertIn('load_previous_day_target', config.context_columns('daily'))
 
+    def test_rejects_out_of_order_and_empty_split_boundaries(self):
+        start = datetime(2020, 1, 2, tzinfo=timezone.utc)
+        records = [(start, start + timedelta(hours=1), 1, 1.0)]
+        self.write_split('hourly', 'fit', records)
+        manifest_path = self.root / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text())
+        manifest['split_boundaries_utc']['validation'] = {
+            'start_inclusive': '2019-01-01T00:00:00+00:00',
+            'end_exclusive': '2019-02-01T00:00:00+00:00',
+        }
+        manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, 'overlap or are out of order'):
+            load_split(self.root, 'hourly', 'fit', FeatureConfig(24, calendar=False))
+        manifest['split_boundaries_utc'].pop('validation')
+        manifest['split_boundaries_utc']['fit']['end_exclusive'] = '2020-01-01T00:00:00+00:00'
+        manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, 'Invalid split boundaries'):
+            load_split(self.root, 'hourly', 'fit', FeatureConfig(24, calendar=False))
+
     def test_hourly_fit_only_transform_and_serialization(self):
         start = datetime(2020, 1, 2, tzinfo=timezone.utc)
         records = [(start + timedelta(hours=i), start + timedelta(hours=i+1), 1, float(i)) for i in range(3)]
         self.write_split('hourly', 'fit', records)
-        self.write_split('hourly', 'validation', records)
+        validation_records = [(origin + timedelta(days=31), target + timedelta(days=31), step, level)
+                              for origin, target, step, level in records]
+        self.write_split('hourly', 'validation', validation_records)
         config = FeatureConfig(24, calendar=False)
         fit = load_split(self.root, 'hourly', 'fit', config)
         validation = load_split(self.root, 'hourly', 'validation', config)

@@ -36,6 +36,8 @@ class DailyFeaturesTest(unittest.TestCase):
 
     def test_weather_is_optional_and_missing_is_preserved(self):
         records = self.make_records()
+        self.assertEqual(next(daily_rows(records, 0))[3]['temperature_latest'], 167.0)
+        self.assertEqual(next(daily_rows(records, 2))[3]['temperature_latest'], 165.0)
         stamp, load, weather = records[166]
         records[166] = (stamp, load, {**weather, 'temperature': None})
         without = next(daily_rows(records))[3]
@@ -44,6 +46,12 @@ class DailyFeaturesTest(unittest.TestCase):
         self.assertIsNone(with_weather['temperature_latest'])
         self.assertEqual(with_weather['temperature_missing'], 1)
         self.assertIsNone(with_weather['temperature_mean_3h'])
+
+    def test_rejects_invalid_weather_delays(self):
+        records = self.make_records()
+        for latency in (-1, 0.5, True):
+            with self.subTest(latency=latency), self.assertRaisesRegex(ValueError, 'nonnegative integer'):
+                next(daily_rows(records, latency))
 
     def test_incomplete_profile_is_omitted(self):
         records = self.make_records()

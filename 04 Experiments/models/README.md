@@ -52,6 +52,20 @@ run='04 Experiments/models/runs/lstm-example'
   --dataset "$dataset" --freeze-file "$run/freeze.json" --output "$run/heldout"
 ```
 
+The previously reported starter freezes capture the code at commit `5495f62`. The subsequent split-boundary fix changes the preprocessing code hash, so the current evaluator intentionally rejects those old freezes. To replay an existing local freeze, export that commit into a temporary directory, link the local ignored runs directory, and use the original manifest and environment:
+
+```bash
+archive_dir="$(mktemp -d /private/tmp/electricity-frozen-XXXXXXXX)"
+git archive 5495f62 | tar -x -C "$archive_dir"
+ln -s "$PWD/04 Experiments/models/runs" "$archive_dir/04 Experiments/models/runs"
+run="$PWD/04 Experiments/models/runs/gru_h24_verified"
+dataset="$PWD/04 Experiments/shared_features/prepared_no_weather/rebuild_v2"
+.venv/bin/python "$archive_dir/04 Experiments/models/evaluate.py" --evaluate \
+  --dataset "$dataset" --freeze-file "$run/freeze.json" --output "$run/replay-example"
+```
+
+The old manifest and model artifacts are local and excluded from the repository. A newly generated manifest may record different generator hashes even when its CSVs match, so it cannot replace the original manifest for this exact freeze check. Train and freeze new runs with the current code.
+
 ## Train a daily forecast
 
 ```bash
@@ -73,3 +87,42 @@ The generator executes each notebook from an empty working directory and exports
 ## Scope
 
 See [the starter comparison](../Starter%20results.md) for results and limitations. UTC split boundaries and the optional 00:00 UTC daily schedule remain provisional. The project owner confirmed the completed meter reading is available at the origin. Historical weather publication and revision timing remain unverified.
+
+## Reproduce feature and weather comparisons
+
+The [starter results](../Starter%20results.md) compare eight hourly GRU configurations on identical validation targets. The following example starts at the repository root. It uses a fresh output name for each run. The weather build and both weather experiments are conditional on an unverified one-hour observation delay.
+
+```bash
+data='04 Experiments/shared_features/prepared_no_weather/group_rebuild'
+weather='04 Experiments/shared_features/generated_weather_1h/group_rebuild'
+runs='04 Experiments/models/runs'
+build='04 Experiments/shared_features/build_datasets.py'
+train='04 Experiments/models/train.py'
+
+.venv/bin/python "$build" --output-dir "$data"
+.venv/bin/python "$build" --output-dir "$weather" --weather-latency-hours 1
+
+.venv/bin/python "$train" --dataset "$data" --model gru --history 24 --seed 42 --no-calendar --output "$runs/repro-history"
+.venv/bin/python "$train" --dataset "$data" --model gru --history 24 --seed 42 --no-calendar --rolling --output "$runs/repro-history-rolling"
+.venv/bin/python "$train" --dataset "$data" --model gru --history 24 --seed 42 --output "$runs/repro-calendar"
+.venv/bin/python "$train" --dataset "$data" --model gru --history 24 --seed 42 --rolling --output "$runs/repro-calendar-rolling"
+.venv/bin/python "$train" --dataset "$data" --model gru --history 72 --seed 42 --output "$runs/repro-calendar-72"
+.venv/bin/python "$train" --dataset "$data" --model gru --history 168 --seed 42 --output "$runs/repro-calendar-168"
+.venv/bin/python "$train" --dataset "$weather" --model gru --history 24 --seed 42 --weather-temperature --output "$runs/repro-temperature"
+.venv/bin/python "$train" --dataset "$weather" --model gru --history 24 --seed 42 --weather-temperature --weather-temperature-rolling --weather-humidity --weather-wind --output "$runs/repro-weather"
+
+.venv/bin/python '04 Experiments/models/summarize_validation.py' \
+  --experiment history "$data" "$runs/repro-history" \
+  --experiment history_rolling "$data" "$runs/repro-history-rolling" \
+  --experiment calendar "$data" "$runs/repro-calendar" \
+  --experiment calendar_rolling "$data" "$runs/repro-calendar-rolling" \
+  --experiment calendar_72 "$data" "$runs/repro-calendar-72" \
+  --experiment calendar_168 "$data" "$runs/repro-calendar-168" \
+  --experiment temperature "$weather" "$runs/repro-temperature" \
+  --experiment weather "$weather" "$runs/repro-weather" \
+  --output "$runs/repro-validation-summary.json"
+```
+
+The trainer defaults to 10 epochs, patience 3, a batch size of 128 and learning rate 0.001. The summary verifies the fit and validation hashes, recorded training code and environment, feature schema and reproduced validation MAE. It refuses comparisons when target keys or labels differ. The ignored JSON includes MAE, RMSE, local-hour and seasonal slices, and missing selected weather inputs before fit-only imputation. Each run is deterministic under the tested environment, but the results are still from one seed. Record additional seeds and any changes to settings when repeating the comparison.
+
+The official test and evaluation results for the shared starters are already published in [Starter results](../Starter%20results.md). Record whether those results influence any later student-model choices.

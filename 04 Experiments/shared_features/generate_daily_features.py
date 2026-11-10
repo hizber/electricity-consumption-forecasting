@@ -16,8 +16,12 @@ def daily_rows(records, weather_latency_hours=None):
     The weather latency is counted from each observation timestamp to the
     single origin. The function expects consecutive hourly input records.
     """
-    if weather_latency_hours is not None and weather_latency_hours < 0:
-        raise ValueError('weather latency must be nonnegative')
+    if weather_latency_hours is not None and (
+        isinstance(weather_latency_hours, bool)
+        or not isinstance(weather_latency_hours, int)
+        or weather_latency_hours < 0
+    ):
+        raise ValueError('weather latency must be a nonnegative integer number of hours')
     holidays = {}
     for origin_index in range(167, len(records) - 24):
         origin = records[origin_index][0]

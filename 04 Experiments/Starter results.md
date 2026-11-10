@@ -6,6 +6,8 @@ On 10 November 2026, the shared comparison selected the four next-hour models wi
 
 Freeze all five runs before opening any test or evaluation split. Score the test and three evaluation periods once with the frozen model and preprocessing. Earlier readings may enter the forecast history when available at the origin. Each hourly model must score the same target keys as the others. Compare daily results only on complete fixed-origin profiles. The figures below use the original source units, which the course dictionary does not specify. UTC assignment boundaries and the 00:00 UTC daily schedule remain provisional. The house's calendar features use `Europe/Helsinki`.
 
+The test and evaluation results below were published on 10 November 2026. The group has now been exposed to those results. If subsequent model or feature decisions use them, those same periods no longer provide an untouched assessment of those decisions. Record any such influence in the final report.
+
 ## Data version and reproducibility
 
 - Source SHA-256 `9e8334d93bc3f9f1391216f68f52eedb5c9ebd3c2a5856e97db0177cf76f70a0`.
@@ -27,7 +29,24 @@ All rows below use the same 8,784 target keys and labels. History is ordered fro
 | History and calendar | 168 | 10 | 0.6723 | 0.9077 | 148.7 |
 | Previous day | | | 0.9181 | 1.2444 | |
 
-The table uses seed 42 and one validation year. Timings are approximate CPU wall time and depend on concurrent load. In these runs 24 hours gave lower MAE than 72 or 168. Adding calendar and rolling to the 24-hour model lowered MAE by 0.0035 compared with history alone. That difference is too small to establish a stable advantage from one run.
+The table uses seed 42 and one validation year. Timings are approximate CPU wall time and depend on concurrent load. In these runs 24 hours gave lower MAE than 72 or 168. Adding calendar and rolling to the 24-hour model lowered MAE by 0.0035 compared with history alone. That difference is too small to establish a stable advantage from one run. Correlation describes association and does not establish feature importance or forecast improvement.
+
+During the 10 November audit, the five non-baseline feature configurations were rerun with seed 42 using the code at commit `5495f62`. Their selected epochs, MAE, RMSE and every hourly and seasonal validation slice reproduced the original values. This repeat checks reproducibility under the same seed; it does not measure variability across seeds. The original runs recorded code hashes for earlier development revisions that were not separately committed.
+
+### Repeated seeds for 24-hour GRU inputs
+
+The audit also trained seeds 1 and 7 with the current split-boundary guard and compared them with the existing seed 42 results. Each configuration used the same 8,784 validation labels. Each cell shows MAE / RMSE at the epoch selected by validation MAE.
+
+| Features | Seed 1 | Seed 7 | Seed 42 | Mean MAE |
+|---|---:|---:|---:|---:|
+| History | 0.6667 / 0.8975 | 0.6694 / 0.8979 | 0.6677 / 0.9050 | 0.6679 |
+| History and rolling | 0.6658 / 0.8993 | 0.6659 / 0.9030 | 0.6671 / 0.8983 | 0.6663 |
+| History and calendar | 0.6647 / 0.8915 | 0.6663 / 0.8950 | 0.6652 / 0.9048 | 0.6654 |
+| History, calendar and rolling | 0.6613 / 0.8978 | 0.6608 / 0.8886 | 0.6642 / 0.8996 | 0.6621 |
+| Calendar and temperature, conditional | 0.6517 / 0.8811 | 0.6569 / 0.8914 | 0.6533 / 0.8833 | 0.6540 |
+| Calendar and expanded weather, conditional | 0.6523 / 0.8805 | 0.6589 / 0.8975 | 0.6540 / 0.8826 | 0.6551 |
+
+Calendar and rolling together improved MAE relative to history alone for each of these seeds. Temperature improved MAE over calendar alone in each run under the unverified delay assumption. The expanded weather group had slightly higher MAE than the temperature group for all three seeds. The comparison uses one validation year and a single household. The new seed runs were performed after the starter holdout results had been published.
 
 ### Seasonal and hourly validation errors
 
